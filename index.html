@@ -640,7 +640,10 @@ let stickersEnabled = false;
 // ── Init webcam ──
 async function initCamera() {
   try {
-    stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+    stream = await navigator.mediaDevices.getUserMedia({
+      video: { aspectRatio: { ideal: 4 / 3 } },
+      audio: false
+    });
     webcam.srcObject = stream;
     statusBar.textContent = 'Click START to begin your photo session';
   } catch (err) {
@@ -754,15 +757,33 @@ function captureFrame() {
   void flashOverlay.offsetWidth; // reflow
   flashOverlay.classList.add('flash');
 
-  // Draw to hidden canvas
+  // Center-crop the source video to 4:3 so output is always 4:3
+  // regardless of the webcam's native aspect ratio.
+  const TARGET_RATIO = 4 / 3;
+  const vw = webcam.videoWidth;
+  const vh = webcam.videoHeight;
+  const videoRatio = vw / vh;
+
+  let srcX = 0, srcY = 0, srcW = vw, srcH = vh;
+  if (videoRatio > TARGET_RATIO) {
+    // wider than 16:9 — crop the sides
+    srcW = Math.round(vh * TARGET_RATIO);
+    srcX = Math.round((vw - srcW) / 2);
+  } else if (videoRatio < TARGET_RATIO) {
+    // taller than 16:9 — crop top/bottom
+    srcH = Math.round(vw / TARGET_RATIO);
+    srcY = Math.round((vh - srcH) / 2);
+  }
+
+  // Draw to hidden canvas (sized to the crop, so output is exactly 16:9)
   const hiddenCanvas = document.createElement('canvas');
-  hiddenCanvas.width  = webcam.videoWidth;
-  hiddenCanvas.height = webcam.videoHeight;
+  hiddenCanvas.width  = srcW;
+  hiddenCanvas.height = srcH;
   const ctx = hiddenCanvas.getContext('2d');
   ctx.save();
   ctx.translate(hiddenCanvas.width, 0);
   ctx.scale(-1, 1); // mirror to match display
-  ctx.drawImage(webcam, 0, 0);
+  ctx.drawImage(webcam, srcX, srcY, srcW, srcH, 0, 0, srcW, srcH);
   ctx.restore();
 
   // Composite sticker on top, matching its on-screen position/size
